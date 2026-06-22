@@ -470,6 +470,9 @@ document.addEventListener("DOMContentLoaded", () => {
     Object.entries(filteredActivities).forEach(([name, details]) => {
       renderActivityCard(name, details);
     });
+
+    // Highlight any activity opened from a shared link
+    highlightSharedActivity();
   }
 
   // Function to render a single activity card
@@ -568,6 +571,9 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `
         }
+        <button class="share-button" data-activity="${name}" aria-label="Share this activity">
+          🔗 Share
+        </button>
       </div>
     `;
 
@@ -587,7 +593,124 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // Add click handler for share button
+    const shareButton = activityCard.querySelector(".share-button");
+    shareButton.addEventListener("click", () => {
+      shareActivity(name, details);
+    });
+
     activitiesList.appendChild(activityCard);
+  }
+
+  // Build a shareable URL for an activity
+  function buildShareUrl(activityName) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("activity", activityName);
+    return url.toString();
+  }
+
+  // Share an activity using the Web Share API or a fallback dropdown
+  function shareActivity(name, details) {
+    const shareUrl = buildShareUrl(name);
+    const shareText = `Check out "${name}" at Mergington High School! ${details.description}`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: name,
+        text: shareText,
+        url: shareUrl,
+      }).catch(() => {
+        // User cancelled or share failed – silently ignore
+      });
+      return;
+    }
+
+    // Fallback: show a small share menu
+    showShareMenu(name, shareText, shareUrl);
+  }
+
+  // Show a dropdown share menu near the button
+  function showShareMenu(name, shareText, shareUrl) {
+    // Remove any existing share menu
+    const existing = document.getElementById("share-menu");
+    if (existing) existing.remove();
+
+    const menu = document.createElement("div");
+    menu.id = "share-menu";
+    menu.className = "share-menu";
+    menu.innerHTML = `
+      <button class="share-menu-close" aria-label="Close share menu">&times;</button>
+      <p class="share-menu-title">Share "${name}"</p>
+      <div class="share-menu-options">
+        <a class="share-option" id="share-copy" href="#" role="button">
+          📋 Copy Link
+        </a>
+        <a class="share-option" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}" target="_blank" rel="noopener noreferrer">
+          🐦 Twitter / X
+        </a>
+        <a class="share-option" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}" target="_blank" rel="noopener noreferrer">
+          📘 Facebook
+        </a>
+        <a class="share-option" href="https://wa.me/?text=${encodeURIComponent(shareText + " " + shareUrl)}" target="_blank" rel="noopener noreferrer">
+          💬 WhatsApp
+        </a>
+        <a class="share-option" href="mailto:?subject=${encodeURIComponent("Join " + name)}&body=${encodeURIComponent(shareText + "\n\n" + shareUrl)}">
+          ✉️ Email
+        </a>
+      </div>
+    `;
+
+    document.body.appendChild(menu);
+
+    // Copy link handler
+    menu.querySelector("#share-copy").addEventListener("click", (e) => {
+      e.preventDefault();
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        const btn = menu.querySelector("#share-copy");
+        btn.textContent = "✅ Copied!";
+        setTimeout(() => closeShareMenu(), 1500);
+      });
+    });
+
+    // Close button
+    menu.querySelector(".share-menu-close").addEventListener("click", closeShareMenu);
+
+    // Close when clicking outside the menu
+    setTimeout(() => {
+      document.addEventListener("click", outsideShareMenuClick);
+    }, 0);
+  }
+
+  function closeShareMenu() {
+    const menu = document.getElementById("share-menu");
+    if (menu) menu.remove();
+    document.removeEventListener("click", outsideShareMenuClick);
+  }
+
+  function outsideShareMenuClick(event) {
+    const menu = document.getElementById("share-menu");
+    if (menu && !menu.contains(event.target)) {
+      closeShareMenu();
+    }
+  }
+
+  // Highlight an activity card that was opened via a shared link
+  function highlightSharedActivity() {
+    const params = new URLSearchParams(window.location.search);
+    const activityName = params.get("activity");
+    if (!activityName) return;
+
+    // Find the matching card and scroll to it
+    const cards = document.querySelectorAll(".activity-card");
+    cards.forEach((card) => {
+      const heading = card.querySelector("h4");
+      if (heading && heading.textContent.trim() === activityName) {
+        card.classList.add("highlighted-activity");
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
   }
 
   // Event listeners for search and filter
